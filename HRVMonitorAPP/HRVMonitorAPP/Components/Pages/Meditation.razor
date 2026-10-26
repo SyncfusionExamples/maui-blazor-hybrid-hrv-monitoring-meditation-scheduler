@@ -10,6 +10,7 @@
 <div class="toolbar">
     <h1>Meditation Scheduler</h1>
     <span class="sep"></span>
+    <SfButton CssClass="e-outline" OnClick="GoToToday">Today</SfButton>
     <SfButton IsPrimary="true" OnClick="Generate">Generate Recommendation</SfButton>
 </div>
 
@@ -25,7 +26,7 @@
     <div style="height:12px"></div>
 }
 
-<SfSchedule @ref="_schedule" TValue="SessionEvent" Height="650px" @bind-SelectedDate="_selectedDate" CurrentView="View.Day"
+<SfSchedule @ref="_schedule" TValue="SessionEvent" Height="650px" @bind-SelectedDate="_selectedDate" @bind-CurrentView="_currentView"
             ShowQuickInfo="true" EnableAdaptiveUI="false">
     <ScheduleEvents TValue="SessionEvent" OnPopupOpen="OnPopupOpen" ActionCompleted="OnActionCompleted" Created="OnCreated" />
     <ScheduleEventSettings DataSource="@_events" AllowAdding="false" EnableTooltip="true">
@@ -49,8 +50,9 @@
     </ScheduleEventSettings>
     <ScheduleTimeScale Enable="true" Interval="30" SlotCount="3" />
     <ScheduleViews>
-        <ScheduleView Option="View.Day" />
-        <ScheduleView Option="View.Week" />
+        <ScheduleView Option="View.Day" DateFormat="dddd, MMM d, yyyy" />
+        <ScheduleView Option="View.Week" DateFormat="MMM d" ShowWeekend="true" />
+        <ScheduleView Option="View.Month" DateFormat="MMMM yyyy" ShowWeekend="true" MaxEventsPerRow="4" />
         <ScheduleView Option="View.Agenda" Interval="30" EventTemplate="@AgendaTemplate" />
     </ScheduleViews>
 </SfSchedule>
@@ -71,6 +73,18 @@
     private List<SessionEvent> _events = new();
     private MeditationSchedule? _latest;
     private DateTime _selectedDate = DateTime.Today;
+    private View _currentView = View.Day;
+
+    /// <summary>Shows only today's schedule: Day view focused on the current date and time.</summary>
+    private async Task GoToToday()
+    {
+        _currentView = View.Day;
+        _selectedDate = DateTime.Today;
+        StateHasChanged();
+        await Task.Yield();
+        if (_schedule is not null)
+            await _schedule.ScrollToAsync(DateTime.Now.AddHours(-1).ToString("HH:mm"), DateTime.Today);
+    }
 
     private RenderFragment<object> AgendaTemplate => context => builder =>
     {

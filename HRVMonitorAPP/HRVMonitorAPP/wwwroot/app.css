@@ -39,3 +39,6 @@ h1:focus { outline: none; }
 .session-reason { font-size: .8rem; color: #6c757d; white-space: normal; }
 .e-schedule .e-agenda-view .e-appointment { height: auto !important; min-height: 48px; white-space: normal; }
 .e-schedule .e-agenda-view .e-appointment .e-subject { white-space: normal; }
+
+/* The page toolbar provides its own Today button (always opens today's Day view). */
+.e-schedule .e-schedule-toolbar .e-today { display: none; }
