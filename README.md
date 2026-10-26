@@ -38,7 +38,7 @@ A cross-platform wellness proof of concept built with .NET MAUI Blazor Hybrid an
 
 ## How to Run the Project
 
-### Visual Studio 2022
+### Visual Studio
 
 1. Clone or download this repository.
 2. Open `HRVMonitorAPP/HRVMonitorAPP.slnx` (the solution file).
