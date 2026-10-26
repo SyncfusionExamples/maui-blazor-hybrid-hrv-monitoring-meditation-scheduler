@@ -1,5 +1,268 @@
-﻿@page "/"
+@page "/"
+@implements IDisposable
+@inject HrvStreamingService Streaming
+@inject IHrvRepository Repo
+@inject IHrvEventService Events
 
-<h1>Hello, world!</h1>
+<PageTitle>Controller Dashboard</PageTitle>
 
-Welcome to your new app.
+<h1>Controller Dashboard</h1>
+
+<SfToast @ref="_toast" Timeout="3000" Title="HRV Monitor">
+    <ToastPosition X="Right" Y="Top" />
+</SfToast>
+
+<div class="panel">
+    <h5>Control Panel</h5>
+    <div class="btn-row">
+        <SfButton IsPrimary="true" Disabled="@Streaming.IsStreaming" OnClick="StartStream">Start Streaming</SfButton>
+        <SfButton Disabled="@(!Streaming.IsStreaming)" OnClick="StopStream">Stop Streaming</SfButton>
+        <span class="e-badge @(Streaming.IsStreaming ? "e-badge-success" : "e-badge-danger")">@(Streaming.IsStreaming ? "LIVE" : "STOPPED")</span>
+    </div>
+    <div class="btn-row">
+        <SfButton CssClass="@(_mode == Mode.Live ? "e-info" : "e-outline")" OnClick="() => SwitchMode(Mode.Live)">Live Data</SfButton>
+        <SfButton CssClass="@(_mode == Mode.Recorded ? "e-info" : "e-outline")" OnClick="() => SwitchMode(Mode.Recorded)">Recorded Data</SfButton>
+    </div>
+</div>
+
+@if (_mode == Mode.Recorded)
+{
+    <div class="panel">
+        <h5>Filter</h5>
+        <div class="btn-row">
+            <SfDateTimePicker TValue="DateTime" @bind-Value="_from" Placeholder="From DateTime" FloatLabelType="FloatLabelType.Auto" Width="260px" />
+            <SfDateTimePicker TValue="DateTime" @bind-Value="_to" Placeholder="To DateTime" FloatLabelType="FloatLabelType.Auto" Width="260px" />
+            <SfButton IsPrimary="true" OnClick="LoadRecorded">Load Data</SfButton>
+        </div>
+    </div>
+}
+
+@if (_loading)
+{
+    <SfSkeleton Shape="Syncfusion.Blazor.Notifications.SkeletonType.Rectangle" Width="100%" Height="120px" />
+}
+else
+{
+    <SfDashboardLayout Columns="4" CellSpacing="@(new double[] { 10, 10 })" CellAspectRatio="1.6" AllowDragging="false" AllowResizing="false">
+        <DashboardLayoutPanels>
+            @foreach (var (title, value) in Cards())
+            {
+                <DashboardLayoutPanel SizeX="1" SizeY="1">
+                    <ContentTemplate>
+                        <SfCard>
+                            <CardHeader Title="@title" />
+                            <CardContent><span class="kpi">@value</span></CardContent>
+                        </SfCard>
+                    </ContentTemplate>
+                </DashboardLayoutPanel>
+            }
+        </DashboardLayoutPanels>
+    </SfDashboardLayout>
+
+    <div class="charts">
+        <SfChart Title="Heart Rate Trend" Height="220px">
+            <ChartPrimaryXAxis ValueType="Syncfusion.Blazor.Charts.ValueType.DateTime" LabelFormat="HH:mm:ss" Title="Timestamp" />
+            <ChartPrimaryYAxis Title="BPM" Minimum="40" />
+            <ChartSeriesCollection>
+                <ChartSeries DataSource="@_chartData" XName="Timestamp" YName="HeartRate" Type="ChartSeriesType.Line" Fill="#e74c3c" Width="2" />
+            </ChartSeriesCollection>
+        </SfChart>
+        <SfChart Title="RMSSD Trend" Height="220px">
+            <ChartPrimaryXAxis ValueType="Syncfusion.Blazor.Charts.ValueType.DateTime" LabelFormat="HH:mm:ss" Title="Timestamp" />
+            <ChartPrimaryYAxis Title="RMSSD" />
+            <ChartSeriesCollection>
+                <ChartSeries DataSource="@_chartData" XName="Timestamp" YName="RMSSD" Type="ChartSeriesType.Line" Fill="#2980b9" Width="2" />
+            </ChartSeriesCollection>
+        </SfChart>
+        <SfChart Title="Stress Trend" Height="220px">
+            <ChartPrimaryXAxis ValueType="Syncfusion.Blazor.Charts.ValueType.DateTime" LabelFormat="HH:mm:ss" Title="Timestamp" />
+            <ChartPrimaryYAxis Title="Stress Score" />
+            <ChartSeriesCollection>
+                <ChartSeries DataSource="@_chartData" XName="Timestamp" YName="StressScore" Type="ChartSeriesType.Line" Fill="#e67e22" Width="2" />
+            </ChartSeriesCollection>
+        </SfChart>
+    </div>
+
+    @if (_mode == Mode.Recorded)
+    {
+        <h5>Historical Analytics (@_summary.Count records)</h5>
+        <SfDashboardLayout Columns="6" CellSpacing="@(new double[] { 10, 10 })" CellAspectRatio="1.2" AllowDragging="false" AllowResizing="false">
+            <DashboardLayoutPanels>
+                @foreach (var (title, value) in Kpis())
+                {
+                    <DashboardLayoutPanel SizeX="1" SizeY="1">
+                        <ContentTemplate>
+                            <SfCard>
+                                <CardHeader Title="@title" />
+                                <CardContent><span class="kpi">@value</span></CardContent>
+                            </SfCard>
+                        </ContentTemplate>
+                    </DashboardLayoutPanel>
+                }
+            </DashboardLayoutPanels>
+        </SfDashboardLayout>
+    }
+
+    <SfGrid DataSource="@_gridData" Height="400px" AllowPaging="@(_mode == Mode.Recorded)" AllowSorting="true">
+        @if (_mode == Mode.Recorded)
+        {
+            <GridPageSettings PageSize="50" />
+        }
+        <GridEvents TValue="HrvMeasurement" RowDataBound="OnRowBound" />
+        <GridColumns>
+            <GridColumn Field="@nameof(HrvMeasurement.Timestamp)" HeaderText="Timestamp" Format="yyyy-MM-dd HH:mm:ss" Width="170" />
+            <GridColumn Field="@nameof(HrvMeasurement.HeartRate)" HeaderText="Heart Rate" Width="110" />
+            <GridColumn Field="@nameof(HrvMeasurement.RMSSD)" HeaderText="RMSSD" Width="100" />
+            <GridColumn Field="@nameof(HrvMeasurement.SDNN)" HeaderText="SDNN" Width="100" />
+            <GridColumn Field="@nameof(HrvMeasurement.PNN50)" HeaderText="PNN50" Width="100" />
+            <GridColumn Field="@nameof(HrvMeasurement.StressScore)" HeaderText="Stress Score" Width="120" />
+            <GridColumn Field="@nameof(HrvMeasurement.ReadinessScore)" HeaderText="Readiness Score" Width="140" />
+        </GridColumns>
+    </SfGrid>
+}
+
+<style>
+    .panel { border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+    .btn-row { display: flex; gap: 12px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+    .kpi { font-size: 1.6rem; font-weight: 600; }
+    .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin: 12px 0; }
+    .latest-row td { background-color: #fff3b0 !important; font-weight: 600; }
+</style>
+
+@code {
+    private enum Mode { Live, Recorded }
+
+    private const int MaxRows = 100;
+    private Mode _mode = Mode.Live;
+    private bool _loading = true;
+    private SfToast? _toast;
+    private readonly List<HrvMeasurement> _live = new();
+    private List<HrvMeasurement> _gridData = new();
+    private List<HrvMeasurement> _chartData = new();
+    private HrvMeasurement? _latest;
+    private HrvSummary _summary = HrvSummary.From(Array.Empty<HrvMeasurement>());
+    private DateTime _from = DateTime.Now.AddHours(-1);
+    private DateTime _to = DateTime.Now;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _live.AddRange(await Repo.GetLatestAsync(MaxRows));
+        ApplyLive();
+        _loading = false;
+        Events.MeasurementPublished += OnMeasurement;
+        Events.StreamStateChanged += OnStateChanged;
+    }
+
+    private void ApplyLive()
+    {
+        _latest = _live.LastOrDefault();
+        _chartData = _live.TakeLast(60).ToList();
+        _gridData = Enumerable.Reverse(_live).ToList();
+    }
+
+    private void OnMeasurement(HrvMeasurement m)
+    {
+        InvokeAsync(() =>
+        {
+            if (_mode != Mode.Live) return;
+            _live.Add(m);
+            if (_live.Count > MaxRows) _live.RemoveAt(0);
+            ApplyLive();
+            StateHasChanged();
+        });
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnRowBound(RowDataBoundEventArgs<HrvMeasurement> args)
+    {
+        if (_mode == Mode.Live && _latest is not null && args.Data.Id == _latest.Id)
+            args.Row.AddClass(new[] { "latest-row" });
+    }
+
+    private IEnumerable<(string, string)> Cards()
+    {
+        if (_mode == Mode.Recorded)
+        {
+            yield return ("Heart Rate (avg)", $"{_summary.AvgHeartRate} bpm");
+            yield return ("RMSSD (avg)", $"{_summary.AvgRmssd} ms");
+            yield return ("Stress (avg)", $"{_summary.AvgStress}");
+            yield return ("Readiness (avg)", $"{_summary.AvgReadiness}");
+        }
+        else
+        {
+            yield return ("Heart Rate", _latest is null ? "--" : $"{_latest.HeartRate} bpm");
+            yield return ("RMSSD", _latest is null ? "--" : $"{_latest.RMSSD} ms");
+            yield return ("Stress", _latest is null ? "--" : $"{_latest.StressScore}");
+            yield return ("Readiness", _latest is null ? "--" : $"{_latest.ReadinessScore}");
+        }
+    }
+
+    private IEnumerable<(string, string)> Kpis()
+    {
+        yield return ("Average Heart Rate", $"{_summary.AvgHeartRate} bpm");
+        yield return ("Maximum Heart Rate", $"{_summary.MaxHeartRate} bpm");
+        yield return ("Average RMSSD", $"{_summary.AvgRmssd} ms");
+        yield return ("Maximum RMSSD", $"{_summary.MaxRmssd} ms");
+        yield return ("Stress Average", $"{_summary.AvgStress}");
+        yield return ("Readiness Average", $"{_summary.AvgReadiness}");
+    }
+
+    private async Task StartStream()
+    {
+        Streaming.Start();
+        await ShowToast("Streaming started", "e-toast-success");
+    }
+
+    private async Task StopStream()
+    {
+        Streaming.Stop();
+        await ShowToast("Streaming stopped", "e-toast-warning");
+    }
+
+    private async Task SwitchMode(Mode mode)
+    {
+        if (_mode == mode) return;
+        _mode = mode;
+        if (mode == Mode.Live)
+        {
+            _live.Clear();
+            _live.AddRange(await Repo.GetLatestAsync(MaxRows));
+            ApplyLive();
+        }
+        else
+        {
+            _gridData = new();
+            _chartData = new();
+            _summary = HrvSummary.From(Array.Empty<HrvMeasurement>());
+        }
+    }
+
+    private async Task LoadRecorded()
+    {
+        if (_from > _to)
+        {
+            await ShowToast("'From' must be earlier than 'To'", "e-toast-danger");
+            return;
+        }
+        _loading = true;
+        StateHasChanged();
+        var data = await Repo.GetRangeAsync(_from, _to);
+        _summary = HrvSummary.From(data);
+        _gridData = data;
+        // Downsample for chart responsiveness on large ranges.
+        var step = Math.Max(1, data.Count / 500);
+        _chartData = data.Where((_, i) => i % step == 0).ToList();
+        _loading = false;
+        await ShowToast($"Loaded {data.Count} records", data.Count > 0 ? "e-toast-success" : "e-toast-warning");
+    }
+
+    private Task ShowToast(string text, string css) =>
+        _toast is null ? Task.CompletedTask : _toast.ShowAsync(new ToastModel { Content = text, CssClass = css });
+
+    public void Dispose()
+    {
+        Events.MeasurementPublished -= OnMeasurement;
+        Events.StreamStateChanged -= OnStateChanged;
+    }
+}

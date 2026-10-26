@@ -1,0 +1,70 @@
+@page "/meditation"
+@inject IMeditationService MeditationSvc
+
+<PageTitle>Meditation Scheduler</PageTitle>
+
+<h1>Meditation Scheduler</h1>
+
+<SfToast @ref="_toast" Timeout="3000" Title="Meditation">
+    <ToastPosition X="Right" Y="Top" />
+</SfToast>
+
+<p>Suggests a session from the average RMSSD of the latest 60 readings: &lt;30 stress recovery, 30-50 mindfulness, &gt;50 maintenance.</p>
+
+<SfButton IsPrimary="true" OnClick="Generate">Generate Recommendation</SfButton>
+
+@if (_loading)
+{
+    <SfSkeleton Shape="Syncfusion.Blazor.Notifications.SkeletonType.Rectangle" Width="100%" Height="100px" />
+}
+else if (_latest is not null)
+{
+    <SfCard>
+        <CardHeader Title="Suggested Session" />
+        <CardContent>
+            <p><strong>@_latest.RecommendationType</strong></p>
+            <p>Recommended Time: @_latest.RecommendedTime.ToString("g")</p>
+            <p>Duration: @_latest.Duration min</p>
+            <p>Reason: @_latest.Reason</p>
+        </CardContent>
+    </SfCard>
+}
+
+<h5 style="margin-top:1.5rem">History</h5>
+<SfGrid DataSource="@_items" AllowPaging="true">
+    <GridPageSettings PageSize="10" />
+    <GridColumns>
+        <GridColumn Field="@nameof(MeditationSchedule.RecommendationType)" HeaderText="Suggested Session" Width="240" />
+        <GridColumn Field="@nameof(MeditationSchedule.RecommendedTime)" HeaderText="Recommended Time" Format="yyyy-MM-dd HH:mm" Width="170" />
+        <GridColumn Field="@nameof(MeditationSchedule.Duration)" HeaderText="Duration (min)" Width="120" />
+        <GridColumn Field="@nameof(MeditationSchedule.Reason)" HeaderText="Reason" />
+    </GridColumns>
+</SfGrid>
+
+@code {
+    private SfToast? _toast;
+    private bool _loading = true;
+    private List<MeditationSchedule> _items = new();
+    private MeditationSchedule? _latest;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _items = await MeditationSvc.GetSchedulesAsync();
+        _latest = _items.FirstOrDefault();
+        _loading = false;
+    }
+
+    private async Task Generate()
+    {
+        _loading = true;
+        _latest = await MeditationSvc.GenerateRecommendationAsync();
+        _items = await MeditationSvc.GetSchedulesAsync();
+        _loading = false;
+        if (_toast is not null)
+            await _toast.ShowAsync(new ToastModel
+            {
+                Content = _latest is null ? "No HRV data yet - start streaming first." : "Recommendation saved.",
+                CssClass = _latest is null ? "e-toast-warning" : "e-toast-success"
+            });
+    }
+}
