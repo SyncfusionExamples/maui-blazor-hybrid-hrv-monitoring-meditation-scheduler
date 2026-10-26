@@ -2,6 +2,13 @@ using HRVMonitorAPP.Models;
 
 namespace HRVMonitorAPP.Services;
 
+/// <summary>
+/// Generates one synthetic HRV reading per second using a slow sine drift plus noise.
+/// <para>
+/// INTEGRATION POINT (device): replace this class with a real <see cref="IHrvDataSource"/>
+/// (for example a Polar H10 BLE client) by changing the registration in <c>MauiProgram.cs</c>.
+/// </para>
+/// </summary>
 public sealed class SimulatedHrvDataSource : IHrvDataSource
 {
     private readonly Random _rng = new();
@@ -9,9 +16,12 @@ public sealed class SimulatedHrvDataSource : IHrvDataSource
     private CancellationTokenSource? _cts;
     private double _phase;
 
+    /// <inheritdoc />
     public bool IsRunning { get; private set; }
+    /// <inheritdoc />
     public event Action<HrvMeasurement>? MeasurementReceived;
 
+    /// <inheritdoc />
     public void Start()
     {
         lock (_gate)
@@ -23,6 +33,7 @@ public sealed class SimulatedHrvDataSource : IHrvDataSource
         }
     }
 
+    /// <inheritdoc />
     public void Stop()
     {
         lock (_gate)

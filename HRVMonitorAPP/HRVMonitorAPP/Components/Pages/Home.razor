@@ -47,30 +47,27 @@ else
         }
     </div>
 
-    <div class="charts">
-        <SfChart Title="Heart Rate" Height="200px" EnableAnimation="false">
-            <ChartPrimaryXAxis ValueType="Syncfusion.Blazor.Charts.ValueType.DateTime" LabelFormat="HH:mm:ss" />
-            <ChartPrimaryYAxis Minimum="40" />
+    <div class="chart-card">
+        <SfChart Title="@ChartTitle" Height="320px" EnableAnimation="false">
+            <ChartPrimaryXAxis ValueType="Syncfusion.Blazor.Charts.ValueType.DateTime" LabelFormat="HH:mm:ss" Title="Timestamp" EdgeLabelPlacement="EdgeLabelPlacement.Shift" />
+            <ChartPrimaryYAxis Title="Heart Rate (bpm) / RMSSD (ms) / Stress Score" Minimum="0" />
+            <ChartLegendSettings Visible="true" Position="LegendPosition.Bottom" />
+            <ChartTooltipSettings Enable="true" Shared="true" Format="${series.name}: <b>${point.y}</b>" />
+            <ChartCrosshairSettings Enable="true" LineType="LineType.Vertical" />
+            <ChartZoomSettings EnableSelectionZooming="true" EnableMouseWheelZooming="true" EnablePan="true" Mode="ZoomMode.X" />
             <ChartSeriesCollection>
-                <ChartSeries DataSource="@_chartData" XName="Timestamp" YName="HeartRate" Type="ChartSeriesType.Line" Fill="#e53935" Width="2" Animation="@_noAnim" />
-            </ChartSeriesCollection>
-        </SfChart>
-        <SfChart Title="RMSSD" Height="200px" EnableAnimation="false">
-            <ChartPrimaryXAxis ValueType="Syncfusion.Blazor.Charts.ValueType.DateTime" LabelFormat="HH:mm:ss" />
-            <ChartSeriesCollection>
-                <ChartSeries DataSource="@_chartData" XName="Timestamp" YName="RMSSD" Type="ChartSeriesType.Line" Fill="#3b3f8c" Width="2" Animation="@_noAnim" />
-            </ChartSeriesCollection>
-        </SfChart>
-        <SfChart Title="Stress Score" Height="200px" EnableAnimation="false">
-            <ChartPrimaryXAxis ValueType="Syncfusion.Blazor.Charts.ValueType.DateTime" LabelFormat="HH:mm:ss" />
-            <ChartSeriesCollection>
-                <ChartSeries DataSource="@_chartData" XName="Timestamp" YName="StressScore" Type="ChartSeriesType.Line" Fill="#fb8c00" Width="2" Animation="@_noAnim" />
+                <ChartSeries DataSource="@_chartData" Name="Heart Rate" XName="Timestamp" YName="HeartRate" Type="ChartSeriesType.Line" Fill="#e53935" Width="2" Animation="@_noAnim" />
+                <ChartSeries DataSource="@_chartData" Name="RMSSD" XName="Timestamp" YName="RMSSD" Type="ChartSeriesType.Line" Fill="#3b3f8c" Width="2" Animation="@_noAnim" />
+                <ChartSeries DataSource="@_chartData" Name="Stress Score" XName="Timestamp" YName="StressScore" Type="ChartSeriesType.Line" Fill="#fb8c00" Width="2" Animation="@_noAnim" />
             </ChartSeriesCollection>
         </SfChart>
     </div>
 
-    <SfGrid DataSource="@_gridData" Height="360px" EnableVirtualization="true" EnableHover="false">
-        <GridEvents TValue="HrvMeasurement" RowDataBound="OnRowBound" />
+    <SfGrid @ref="_grid" DataSource="@_gridData" TValue="HrvMeasurement" AllowPaging="true" AllowSorting="true" AllowFiltering="true"
+            AllowExcelExport="true" AllowPdfExport="true" EnableHover="false" Toolbar="@_toolbar">
+        <GridPageSettings PageSize="15" />
+        <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel" />
+        <GridEvents TValue="HrvMeasurement" RowDataBound="OnRowBound" OnToolbarClick="OnToolbarClick" />
         <GridColumns>
             <GridColumn Field="@nameof(HrvMeasurement.Timestamp)" HeaderText="Timestamp" Format="yyyy-MM-dd HH:mm:ss" Width="170" />
             <GridColumn Field="@nameof(HrvMeasurement.HeartRate)" HeaderText="Heart Rate" Width="110" />
@@ -88,6 +85,8 @@ else
 
     private const int MaxRows = 100;
     private readonly ChartSeriesAnimation _noAnim = new() { Enable = false };
+    private SfGrid<HrvMeasurement>? _grid;
+    private readonly List<string> _toolbar = new() { "ExcelExport", "CsvExport", "PdfExport" };
     private Mode _mode = Mode.Live;
     private bool _loading = true;
     private SfToast? _toast;
@@ -125,6 +124,18 @@ else
             ApplyLive();
             StateHasChanged();
         });
+    }
+
+    private string ChartTitle => _mode == Mode.Live
+        ? "Live HRV Metrics (last 60 seconds)"
+        : $"Recorded HRV Metrics ({_from:g} - {_to:g})";
+
+    private async Task OnToolbarClick(Syncfusion.Blazor.Navigations.ClickEventArgs args)
+    {
+        if (_grid is null) return;
+        if (args.Item.Id.EndsWith("excelexport")) await _grid.ExportToExcelAsync();
+        else if (args.Item.Id.EndsWith("csvexport")) await _grid.ExportToCsvAsync();
+        else if (args.Item.Id.EndsWith("pdfexport")) await _grid.ExportToPdfAsync();
     }
 
     private void OnStateChanged() => InvokeAsync(StateHasChanged);

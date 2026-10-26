@@ -76,6 +76,7 @@
         <PackageReference Include="Syncfusion.Blazor.Calendars" Version="35.1.41" />
         <PackageReference Include="Syncfusion.Blazor.Buttons" Version="35.1.41" />
         <PackageReference Include="Syncfusion.Blazor.Schedule" Version="35.1.41" />
+        <PackageReference Include="Syncfusion.Blazor.Navigations" Version="35.1.41" />
         <PackageReference Include="Syncfusion.Blazor.Cards" Version="35.1.41" />
         <PackageReference Include="Syncfusion.Blazor.Notifications" Version="35.1.41" />
         <PackageReference Include="Syncfusion.Blazor.Inputs" Version="35.1.41" />

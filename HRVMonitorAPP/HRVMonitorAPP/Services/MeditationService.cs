@@ -2,19 +2,33 @@ using HRVMonitorAPP.Models;
 
 namespace HRVMonitorAPP.Services;
 
+/// <summary>Meditation recommendation engine and schedule management.</summary>
 public interface IMeditationService
 {
+    /// <summary>Creates and stores a recommendation from recent HRV readings; null when no data exists.</summary>
     Task<MeditationSchedule?> GenerateRecommendationAsync();
+
+    /// <summary>Returns all stored recommendations, newest first.</summary>
     Task<List<MeditationSchedule>> GetSchedulesAsync();
+
+    /// <summary>Persists changes to an existing recommendation.</summary>
+    /// <param name="s">The updated recommendation.</param>
     Task UpdateAsync(MeditationSchedule s);
+
+    /// <summary>Deletes a recommendation.</summary>
+    /// <param name="id">Primary key of the recommendation.</param>
     Task DeleteAsync(int id);
 }
 
+/// <summary>Mock rule-based engine: RMSSD &lt; 30 recovery, 30-50 mindfulness, &gt; 50 maintenance.</summary>
 public sealed class MeditationService : IMeditationService
 {
     private readonly IHrvRepository _repo;
+    /// <summary>Creates the service.</summary>
+    /// <param name="repo">Persistence layer.</param>
     public MeditationService(IHrvRepository repo) => _repo = repo;
 
+    /// <inheritdoc />
     public async Task<MeditationSchedule?> GenerateRecommendationAsync()
     {
         var recent = await _repo.GetLatestAsync(60);
@@ -39,7 +53,10 @@ public sealed class MeditationService : IMeditationService
         return s;
     }
 
+    /// <inheritdoc />
     public Task<List<MeditationSchedule>> GetSchedulesAsync() => _repo.GetSchedulesAsync();
+    /// <inheritdoc />
     public Task UpdateAsync(MeditationSchedule s) => _repo.UpdateScheduleAsync(s);
+    /// <inheritdoc />
     public Task DeleteAsync(int id) => _repo.DeleteScheduleAsync(id);
 }

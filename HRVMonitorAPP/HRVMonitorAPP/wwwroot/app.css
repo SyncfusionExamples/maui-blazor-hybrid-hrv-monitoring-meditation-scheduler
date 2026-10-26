@@ -20,8 +20,22 @@ h1:focus { outline: none; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .kpi-label { font-size: .75rem; color: #6c757d; text-transform: uppercase; letter-spacing: .04em; }
 .kpi-value { font-size: 1.5rem; font-weight: 600; color: #3b3f8c; }
+.chart-card { background: #fff; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px; margin-bottom: 12px; }
 .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .latest-row td { background-color: #e8eaf6 !important; font-weight: 600; }
 .hint { color: #6c757d; font-size: .85rem; margin: 0; }
 .e-card { box-shadow: none; border: 1px solid #dee2e6; }
 .e-card .e-card-content { padding: 10px 14px; }
+
+/* Scheduler: taller 10-minute slots so short sessions are never cropped */
+.e-schedule .e-vertical-view .e-work-cells,
+.e-schedule .e-vertical-view .e-time-cells-wrap table td { height: 32px; }
+.e-schedule .e-vertical-view .e-appointment { min-height: 32px; }
+.e-schedule .e-appointment { border-radius: 4px; }
+.session-event { padding: 2px 6px; line-height: 1.25; overflow: visible; white-space: normal; }
+.session-time { font-size: .72rem; opacity: .9; }
+.session-title { font-size: .82rem; font-weight: 600; }
+.agenda-event { white-space: normal; padding: 4px 0; }
+.session-reason { font-size: .8rem; color: #6c757d; white-space: normal; }
+.e-schedule .e-agenda-view .e-appointment { height: auto !important; min-height: 48px; white-space: normal; }
+.e-schedule .e-agenda-view .e-appointment .e-subject { white-space: normal; }

@@ -25,20 +25,33 @@
     <div style="height:12px"></div>
 }
 
-<SfSchedule TValue="SessionEvent" Height="560px" @bind-SelectedDate="_selectedDate" CurrentView="View.Week" StartHour="@_startHour" EndHour="@_endHour">
-    <ScheduleEvents TValue="SessionEvent" OnPopupOpen="OnPopupOpen" ActionCompleted="OnActionCompleted" />
-    <ScheduleEventSettings DataSource="@_events" AllowAdding="false">
+<SfSchedule @ref="_schedule" TValue="SessionEvent" Height="650px" @bind-SelectedDate="_selectedDate" CurrentView="View.Day"
+            ShowQuickInfo="true" EnableAdaptiveUI="false">
+    <ScheduleEvents TValue="SessionEvent" OnPopupOpen="OnPopupOpen" ActionCompleted="OnActionCompleted" Created="OnCreated" />
+    <ScheduleEventSettings DataSource="@_events" AllowAdding="false" EnableTooltip="true">
+        <ChildContent>
         <ScheduleField Id="Id">
             <FieldSubject Name="Subject" />
             <FieldDescription Name="Description" />
             <FieldStartTime Name="StartTime" />
             <FieldEndTime Name="EndTime" />
         </ScheduleField>
+        </ChildContent>
+        <Template Context="data">
+            @{
+                var e = (SessionEvent)data;
+            }
+            <div class="session-event">
+                <div class="session-time">@e.StartTime.ToString("HH:mm") - @e.EndTime.ToString("HH:mm")</div>
+                <div class="session-title">@e.Subject</div>
+            </div>
+        </Template>
     </ScheduleEventSettings>
+    <ScheduleTimeScale Enable="true" Interval="30" SlotCount="3" />
     <ScheduleViews>
         <ScheduleView Option="View.Day" />
         <ScheduleView Option="View.Week" />
-        <ScheduleView Option="View.Agenda" />
+        <ScheduleView Option="View.Agenda" Interval="30" EventTemplate="@AgendaTemplate" />
     </ScheduleViews>
 </SfSchedule>
 
@@ -53,12 +66,36 @@
         public DateTime CreatedDate { get; set; }
     }
 
+    private SfSchedule<SessionEvent>? _schedule;
     private SfToast? _toast;
     private List<SessionEvent> _events = new();
     private MeditationSchedule? _latest;
     private DateTime _selectedDate = DateTime.Today;
-    private string _startHour = "00:00";
-    private string _endHour = "24:00";
+
+    private RenderFragment<object> AgendaTemplate => context => builder =>
+    {
+        if (context is not SessionEvent e) return;
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "agenda-event");
+        builder.OpenElement(2, "div");
+        builder.AddAttribute(3, "class", "session-title");
+        builder.AddContent(4, $"{e.Subject} ({e.StartTime:HH:mm} - {e.EndTime:HH:mm})");
+        builder.CloseElement();
+        builder.OpenElement(5, "div");
+        builder.AddAttribute(6, "class", "session-reason");
+        builder.AddContent(7, e.Description);
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private Task OnCreated() => ScrollToSession();
+
+    private async Task ScrollToSession()
+    {
+        if (_schedule is null) return;
+        var t = _latest?.RecommendedTime ?? DateTime.Now;
+        await _schedule.ScrollToAsync(t.AddHours(-1).ToString("HH:mm"), t);
+    }
 
     protected override async Task OnInitializedAsync() => await Reload();
 
@@ -84,6 +121,7 @@
         {
             await Reload();
             _selectedDate = created.RecommendedTime;
+            await ScrollToSession();
         }
         await Toast(created is null ? "No HRV data yet - start streaming first." : "Recommendation saved.",
                     created is null ? "e-toast-warning" : "e-toast-success");
