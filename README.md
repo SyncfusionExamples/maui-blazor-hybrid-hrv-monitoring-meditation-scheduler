@@ -142,13 +142,10 @@ maui-blazor-hybrid-hrv-monitoring-meditation-scheduler/
 
 | Component | Used for | Documentation / demo |
 | --- | --- | --- |
-| `SfGrid` | Live and recorded HRV data grid | [Docs](https://blazor.syncfusion.com/documentation/datagrid/getting-started) · [Demo](https://blazor.syncfusion.com/demos/datagrid/overview) |
-| `SfChart` | Multi-line HRV chart | [Docs](https://blazor.syncfusion.com/documentation/chart/getting-started) · [Demo](https://blazor.syncfusion.com/demos/chart/line) |
-| `SfSchedule` | Meditation Scheduler (Day/Week/Month/Agenda) | [Docs](https://blazor.syncfusion.com/documentation/scheduler/getting-started) · [Demo](https://blazor.syncfusion.com/demos/scheduler/default-functionalities) |
-| `SfDateTimePicker` | From/To filter for recorded data | [Docs](https://blazor.syncfusion.com/documentation/datetime-picker/getting-started) · [Demo](https://blazor.syncfusion.com/demos/datetimepicker/default-functionalities) |
-| `SfButton` | Actions and mode toggles | [Docs](https://blazor.syncfusion.com/documentation/button/getting-started) · [Demo](https://blazor.syncfusion.com/demos/button/default-functionalities) |
-| `SfCard` | KPI and suggestion cards | [Docs](https://blazor.syncfusion.com/documentation/card/getting-started) · [Demo](https://blazor.syncfusion.com/demos/card/default-functionalities) |
-| `SfToast` | Notifications | [Docs](https://blazor.syncfusion.com/documentation/toast/getting-started) · [Demo](https://blazor.syncfusion.com/demos/toast/default-functionalities) |
-| `SfSkeleton` | Loading placeholders | [Docs](https://blazor.syncfusion.com/documentation/skeleton/getting-started) · [Demo](https://blazor.syncfusion.com/demos/skeleton/default-functionalities) |
+| `Grid` | Live and recorded HRV data grid | [Docs](https://blazor.syncfusion.com/documentation/datagrid/getting-started) · [Demo](https://blazor.syncfusion.com/demos/datagrid/overview) |
+| `Chart` | Multi-line HRV chart | [Docs](https://blazor.syncfusion.com/documentation/chart/getting-started) · [Demo](https://blazor.syncfusion.com/demos/chart/line) |
+| `Schedule` | Meditation Scheduler (Day/Week/Month/Agenda) | [Docs](https://blazor.syncfusion.com/documentation/scheduler/getting-started) · [Demo](https://blazor.syncfusion.com/demos/scheduler/default-functionalities) |
+| `DateTimePicker` | From/To filter for recorded data | [Docs](https://blazor.syncfusion.com/documentation/datetime-picker/getting-started) · [Demo](https://blazor.syncfusion.com/demos/datetimepicker/default-functionalities) |
+| `Button` | Actions and mode toggles | [Docs](https://blazor.syncfusion.com/documentation/button/getting-started) · [Demo](https://blazor.syncfusion.com/demos/button/default-functionalities) |
 | Badge (`e-badge` CSS class) | LIVE / STOPPED indicator | [Docs](https://blazor.syncfusion.com/documentation/badge/getting-started) · [Demo](https://blazor.syncfusion.com/demos/badge/default-functionalities) |
 | Bootstrap 5 theme (`Syncfusion.Blazor.Themes`) | Consistent styling | [Docs](https://blazor.syncfusion.com/documentation/appearance/themes) |
