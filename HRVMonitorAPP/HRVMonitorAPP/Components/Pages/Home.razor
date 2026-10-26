@@ -1,5 +1,226 @@
-﻿@page "/"
+@page "/"
+@implements IDisposable
+@inject HrvStreamingService Streaming
+@inject IHrvRepository Repo
+@inject IHrvEventService Events
 
-<h1>Hello, world!</h1>
+<PageTitle>Controller Dashboard</PageTitle>
 
-Welcome to your new app.
+<SfToast @ref="_toast" Timeout="3000" Width="260px">
+    <ToastPosition X="Right" Y="Top" />
+</SfToast>
+
+<div class="toolbar">
+    <h1>Controller Dashboard</h1>
+    <span class="sep"></span>
+    <span class="e-badge @(Streaming.IsStreaming ? "e-badge-success" : "e-badge-danger")">@(Streaming.IsStreaming ? "LIVE" : "STOPPED")</span>
+    <SfButton IsPrimary="true" Disabled="@Streaming.IsStreaming" OnClick="StartStream">Start</SfButton>
+    <SfButton Disabled="@(!Streaming.IsStreaming)" OnClick="StopStream">Stop</SfButton>
+    <SfButton CssClass="@(_mode == Mode.Live ? "e-info" : "e-outline")" OnClick="() => SwitchMode(Mode.Live)">Live Data</SfButton>
+    <SfButton CssClass="@(_mode == Mode.Recorded ? "e-info" : "e-outline")" OnClick="() => SwitchMode(Mode.Recorded)">Recorded Data</SfButton>
+</div>
+
+@if (_mode == Mode.Recorded)
+{
+    <div class="toolbar">
+        <SfDateTimePicker TValue="DateTime" @bind-Value="_from" Placeholder="From DateTime" FloatLabelType="FloatLabelType.Auto" Width="230px" />
+        <SfDateTimePicker TValue="DateTime" @bind-Value="_to" Placeholder="To DateTime" FloatLabelType="FloatLabelType.Auto" Width="230px" />
+        <SfButton IsPrimary="true" OnClick="LoadRecorded">Load Data</SfButton>
+    </div>
+}
+
+@if (_loading)
+{
+    <SfSkeleton Shape="Syncfusion.Blazor.Notifications.SkeletonType.Rectangle" Width="100%" Height="80px" />
+}
+else
+{
+    <div class="kpis">
+        @foreach (var (title, value) in Kpis())
+        {
+            <SfCard>
+                <CardContent>
+                    <div class="kpi-label">@title</div>
+                    <div class="kpi-value">@value</div>
+                </CardContent>
+            </SfCard>
+        }
+    </div>
+
+    <div class="chart-card">
+        <SfChart Title="@ChartTitle" Height="320px" EnableAnimation="false">
+            <ChartPrimaryXAxis ValueType="Syncfusion.Blazor.Charts.ValueType.DateTime" LabelFormat="HH:mm:ss" Title="Timestamp" EdgeLabelPlacement="EdgeLabelPlacement.Shift" />
+            <ChartPrimaryYAxis Title="Heart Rate (bpm) / RMSSD (ms) / Stress Score" Minimum="0" />
+            <ChartLegendSettings Visible="true" Position="LegendPosition.Bottom" />
+            <ChartTooltipSettings Enable="true" Shared="true" Format="${series.name}: <b>${point.y}</b>" />
+            <ChartCrosshairSettings Enable="true" LineType="LineType.Vertical" />
+            <ChartZoomSettings EnableSelectionZooming="true" EnableMouseWheelZooming="true" EnablePan="true" Mode="ZoomMode.X" />
+            <ChartSeriesCollection>
+                <ChartSeries DataSource="@_chartData" Name="Heart Rate" XName="Timestamp" YName="HeartRate" Type="ChartSeriesType.Line" Fill="#e53935" Width="2" Animation="@_noAnim" />
+                <ChartSeries DataSource="@_chartData" Name="RMSSD" XName="Timestamp" YName="RMSSD" Type="ChartSeriesType.Line" Fill="#3b3f8c" Width="2" Animation="@_noAnim" />
+                <ChartSeries DataSource="@_chartData" Name="Stress Score" XName="Timestamp" YName="StressScore" Type="ChartSeriesType.Line" Fill="#fb8c00" Width="2" Animation="@_noAnim" />
+            </ChartSeriesCollection>
+        </SfChart>
+    </div>
+
+    <SfGrid @ref="_grid" DataSource="@_gridData" TValue="HrvMeasurement" AllowPaging="true" AllowSorting="true" AllowFiltering="true"
+            AllowExcelExport="true" AllowPdfExport="true" EnableHover="false" Toolbar="@_toolbar">
+        <GridPageSettings PageSize="15" />
+        <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel" />
+        <GridEvents TValue="HrvMeasurement" RowDataBound="OnRowBound" OnToolbarClick="OnToolbarClick" />
+        <GridColumns>
+            <GridColumn Field="@nameof(HrvMeasurement.Timestamp)" HeaderText="Timestamp" Format="yyyy-MM-dd HH:mm:ss" Width="170" />
+            <GridColumn Field="@nameof(HrvMeasurement.HeartRate)" HeaderText="Heart Rate" Width="110" />
+            <GridColumn Field="@nameof(HrvMeasurement.RMSSD)" HeaderText="RMSSD" Width="100" />
+            <GridColumn Field="@nameof(HrvMeasurement.SDNN)" HeaderText="SDNN" Width="100" />
+            <GridColumn Field="@nameof(HrvMeasurement.PNN50)" HeaderText="PNN50" Width="100" />
+            <GridColumn Field="@nameof(HrvMeasurement.StressScore)" HeaderText="Stress" Width="100" />
+            <GridColumn Field="@nameof(HrvMeasurement.ReadinessScore)" HeaderText="Readiness" Width="110" />
+        </GridColumns>
+    </SfGrid>
+}
+
+@code {
+    private enum Mode { Live, Recorded }
+
+    private const int MaxRows = 100;
+    private readonly ChartSeriesAnimation _noAnim = new() { Enable = false };
+    private SfGrid<HrvMeasurement>? _grid;
+    private readonly List<string> _toolbar = new() { "ExcelExport", "CsvExport", "PdfExport" };
+    private Mode _mode = Mode.Live;
+    private bool _loading = true;
+    private SfToast? _toast;
+    private readonly List<HrvMeasurement> _live = new();
+    private List<HrvMeasurement> _gridData = new();
+    private List<HrvMeasurement> _chartData = new();
+    private HrvMeasurement? _latest;
+    private HrvSummary _summary = HrvSummary.From(Array.Empty<HrvMeasurement>());
+    private DateTime _from = DateTime.Now.AddHours(-1);
+    private DateTime _to = DateTime.Now;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _live.AddRange(await Repo.GetLatestAsync(MaxRows));
+        ApplyLive();
+        _loading = false;
+        Events.MeasurementPublished += OnMeasurement;
+        Events.StreamStateChanged += OnStateChanged;
+    }
+
+    private void ApplyLive()
+    {
+        _latest = _live.LastOrDefault();
+        _chartData = _live.TakeLast(60).ToList();
+        _gridData = Enumerable.Reverse(_live).ToList();
+    }
+
+    private void OnMeasurement(HrvMeasurement m)
+    {
+        InvokeAsync(() =>
+        {
+            if (_mode != Mode.Live) return;
+            _live.Add(m);
+            if (_live.Count > MaxRows) _live.RemoveAt(0);
+            ApplyLive();
+            StateHasChanged();
+        });
+    }
+
+    private string ChartTitle => _mode == Mode.Live
+        ? "Live HRV Metrics (last 60 seconds)"
+        : $"Recorded HRV Metrics ({_from:g} - {_to:g})";
+
+    private async Task OnToolbarClick(Syncfusion.Blazor.Navigations.ClickEventArgs args)
+    {
+        if (_grid is null) return;
+        if (args.Item.Id.EndsWith("excelexport")) await _grid.ExportToExcelAsync();
+        else if (args.Item.Id.EndsWith("csvexport")) await _grid.ExportToCsvAsync();
+        else if (args.Item.Id.EndsWith("pdfexport")) await _grid.ExportToPdfAsync();
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnRowBound(RowDataBoundEventArgs<HrvMeasurement> args)
+    {
+        if (_mode == Mode.Live && _latest is not null && args.Data.Id == _latest.Id)
+            args.Row.AddClass(new[] { "latest-row" });
+    }
+
+    private IEnumerable<(string, string)> Kpis()
+    {
+        if (_mode == Mode.Recorded)
+        {
+            yield return ("Avg Heart Rate", $"{_summary.AvgHeartRate} bpm");
+            yield return ("Max Heart Rate", $"{_summary.MaxHeartRate} bpm");
+            yield return ("Avg RMSSD", $"{_summary.AvgRmssd} ms");
+            yield return ("Max RMSSD", $"{_summary.MaxRmssd} ms");
+            yield return ("Stress Average", $"{_summary.AvgStress}");
+            yield return ("Readiness Average", $"{_summary.AvgReadiness}");
+        }
+        else
+        {
+            yield return ("Heart Rate", _latest is null ? "--" : $"{_latest.HeartRate} bpm");
+            yield return ("RMSSD", _latest is null ? "--" : $"{_latest.RMSSD} ms");
+            yield return ("Stress", _latest is null ? "--" : $"{_latest.StressScore}");
+            yield return ("Readiness", _latest is null ? "--" : $"{_latest.ReadinessScore}");
+        }
+    }
+
+    private async Task StartStream()
+    {
+        Streaming.Start();
+        await ShowToast("Streaming started", "e-toast-success");
+    }
+
+    private async Task StopStream()
+    {
+        Streaming.Stop();
+        await ShowToast("Streaming stopped", "e-toast-warning");
+    }
+
+    private async Task SwitchMode(Mode mode)
+    {
+        if (_mode == mode) return;
+        _mode = mode;
+        if (mode == Mode.Live)
+        {
+            _live.Clear();
+            _live.AddRange(await Repo.GetLatestAsync(MaxRows));
+            ApplyLive();
+        }
+        else
+        {
+            _gridData = new();
+            _chartData = new();
+            _summary = HrvSummary.From(Array.Empty<HrvMeasurement>());
+        }
+    }
+
+    private async Task LoadRecorded()
+    {
+        if (_from > _to)
+        {
+            await ShowToast("'From' must be earlier than 'To'", "e-toast-danger");
+            return;
+        }
+        _loading = true;
+        StateHasChanged();
+        var data = await Repo.GetRangeAsync(_from, _to);
+        _summary = HrvSummary.From(data);
+        _gridData = data;
+        // Downsample for chart responsiveness on large ranges.
+        var step = Math.Max(1, data.Count / 500);
+        _chartData = data.Where((_, i) => i % step == 0).ToList();
+        _loading = false;
+        await ShowToast($"Loaded {data.Count} records", data.Count > 0 ? "e-toast-success" : "e-toast-warning");
+    }
+
+    private Task ShowToast(string text, string css) =>
+        _toast is null ? Task.CompletedTask : _toast.ShowAsync(new ToastModel { Content = text, CssClass = css });
+
+    public void Dispose()
+    {
+        Events.MeasurementPublished -= OnMeasurement;
+        Events.StreamStateChanged -= OnStateChanged;
+    }
+}

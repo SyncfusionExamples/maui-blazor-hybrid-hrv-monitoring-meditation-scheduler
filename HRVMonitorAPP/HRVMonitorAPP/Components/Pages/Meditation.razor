@@ -1,0 +1,172 @@
+@page "/meditation"
+@inject IMeditationService MeditationSvc
+
+<PageTitle>Meditation Scheduler</PageTitle>
+
+<SfToast @ref="_toast" Timeout="3000" Width="260px">
+    <ToastPosition X="Right" Y="Top" />
+</SfToast>
+
+<div class="toolbar">
+    <h1>Meditation Scheduler</h1>
+    <span class="sep"></span>
+    <SfButton CssClass="e-outline" OnClick="GoToToday">Today</SfButton>
+    <SfButton IsPrimary="true" OnClick="Generate">Generate Recommendation</SfButton>
+</div>
+
+@if (_latest is not null)
+{
+    <SfCard>
+        <CardContent>
+            <div class="kpi-label">Suggested Session</div>
+            <div class="kpi-value">@_latest.RecommendationType</div>
+            <p class="hint">@_latest.RecommendedTime.ToString("ddd, MMM d HH:mm") &middot; @_latest.Duration min &middot; @_latest.Reason</p>
+        </CardContent>
+    </SfCard>
+    <div style="height:12px"></div>
+}
+
+<SfSchedule @ref="_schedule" TValue="SessionEvent" Height="650px" @bind-SelectedDate="_selectedDate" @bind-CurrentView="_currentView"
+            ShowQuickInfo="true" EnableAdaptiveUI="false">
+    <ScheduleEvents TValue="SessionEvent" OnPopupOpen="OnPopupOpen" ActionCompleted="OnActionCompleted" Created="OnCreated" />
+    <ScheduleEventSettings DataSource="@_events" AllowAdding="false" EnableTooltip="true">
+        <ChildContent>
+        <ScheduleField Id="Id">
+            <FieldSubject Name="Subject" />
+            <FieldDescription Name="Description" />
+            <FieldStartTime Name="StartTime" />
+            <FieldEndTime Name="EndTime" />
+        </ScheduleField>
+        </ChildContent>
+        <Template Context="data">
+            @{
+                var e = (SessionEvent)data;
+            }
+            <div class="session-event">
+                <div class="session-time">@e.StartTime.ToString("HH:mm") - @e.EndTime.ToString("HH:mm")</div>
+                <div class="session-title">@e.Subject</div>
+            </div>
+        </Template>
+    </ScheduleEventSettings>
+    <ScheduleTimeScale Enable="true" Interval="30" SlotCount="3" />
+    <ScheduleViews>
+        <ScheduleView Option="View.Day" DateFormat="dddd, MMM d, yyyy" />
+        <ScheduleView Option="View.Week" DateFormat="MMM d" ShowWeekend="true" />
+        <ScheduleView Option="View.Month" DateFormat="MMMM yyyy" ShowWeekend="true" MaxEventsPerRow="4" />
+        <ScheduleView Option="View.Agenda" Interval="30" EventTemplate="@AgendaTemplate" />
+    </ScheduleViews>
+</SfSchedule>
+
+@code {
+    public class SessionEvent
+    {
+        public int Id { get; set; }
+        public string Subject { get; set; } = "";
+        public string Description { get; set; } = "";
+        public DateTime StartTime { get; set; }
+        public DateTime EndTime { get; set; }
+        public DateTime CreatedDate { get; set; }
+    }
+
+    private SfSchedule<SessionEvent>? _schedule;
+    private SfToast? _toast;
+    private List<SessionEvent> _events = new();
+    private MeditationSchedule? _latest;
+    private DateTime _selectedDate = DateTime.Today;
+    private View _currentView = View.Day;
+
+    /// <summary>Shows only today's schedule: Day view focused on the current date and time.</summary>
+    private async Task GoToToday()
+    {
+        _currentView = View.Day;
+        _selectedDate = DateTime.Today;
+        StateHasChanged();
+        await Task.Yield();
+        if (_schedule is not null)
+            await _schedule.ScrollToAsync(DateTime.Now.AddHours(-1).ToString("HH:mm"), DateTime.Today);
+    }
+
+    private RenderFragment<object> AgendaTemplate => context => builder =>
+    {
+        if (context is not SessionEvent e) return;
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "agenda-event");
+        builder.OpenElement(2, "div");
+        builder.AddAttribute(3, "class", "session-title");
+        builder.AddContent(4, $"{e.Subject} ({e.StartTime:HH:mm} - {e.EndTime:HH:mm})");
+        builder.CloseElement();
+        builder.OpenElement(5, "div");
+        builder.AddAttribute(6, "class", "session-reason");
+        builder.AddContent(7, e.Description);
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private Task OnCreated() => ScrollToSession();
+
+    private async Task ScrollToSession()
+    {
+        if (_schedule is null) return;
+        var t = _latest?.RecommendedTime ?? DateTime.Now;
+        await _schedule.ScrollToAsync(t.AddHours(-1).ToString("HH:mm"), t);
+    }
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload()
+    {
+        var items = await MeditationSvc.GetSchedulesAsync();
+        _latest = items.FirstOrDefault();
+        _events = items.Select(i => new SessionEvent
+        {
+            Id = i.Id,
+            Subject = i.RecommendationType,
+            Description = i.Reason,
+            StartTime = i.RecommendedTime,
+            EndTime = i.RecommendedTime.AddMinutes(i.Duration),
+            CreatedDate = i.CreatedDate
+        }).ToList();
+    }
+
+    private async Task Generate()
+    {
+        var created = await MeditationSvc.GenerateRecommendationAsync();
+        if (created is not null)
+        {
+            await Reload();
+            _selectedDate = created.RecommendedTime;
+            await ScrollToSession();
+        }
+        await Toast(created is null ? "No HRV data yet - start streaming first." : "Recommendation saved.",
+                    created is null ? "e-toast-warning" : "e-toast-success");
+    }
+
+    private void OnPopupOpen(PopupOpenEventArgs<SessionEvent> args)
+    {
+        // Sessions are created by the recommendation engine only.
+        if (args.Type == PopupType.Editor && args.Data?.Id == 0) args.Cancel = true;
+    }
+
+    private async Task OnActionCompleted(Syncfusion.Blazor.Schedule.ActionEventArgs<SessionEvent> args)
+    {
+        if (args.ActionType == Syncfusion.Blazor.Schedule.ActionType.EventChange && args.ChangedRecords is not null)
+        {
+            foreach (var e in args.ChangedRecords)
+            {
+                var minutes = (int)Math.Round((e.EndTime - e.StartTime).TotalMinutes);
+                await MeditationSvc.UpdateAsync(new MeditationSchedule
+                {
+                    Id = e.Id, CreatedDate = e.CreatedDate, RecommendedTime = e.StartTime,
+                    Duration = minutes, RecommendationType = e.Subject, Reason = e.Description
+                });
+            }
+        }
+        else if (args.ActionType == Syncfusion.Blazor.Schedule.ActionType.EventRemove && args.DeletedRecords is not null)
+        {
+            foreach (var e in args.DeletedRecords) await MeditationSvc.DeleteAsync(e.Id);
+        }
+    }
+
+    private Task Toast(string text, string css) =>
+        _toast is null ? Task.CompletedTask : _toast.ShowAsync(new ToastModel { Content = text, CssClass = css });
+}
