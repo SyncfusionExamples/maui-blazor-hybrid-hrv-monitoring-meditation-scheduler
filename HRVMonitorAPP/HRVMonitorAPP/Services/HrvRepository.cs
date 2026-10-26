@@ -10,6 +10,8 @@ public interface IHrvRepository
     Task<List<HrvMeasurement>> GetLatestAsync(int count);
     Task AddScheduleAsync(MeditationSchedule s);
     Task<List<MeditationSchedule>> GetSchedulesAsync();
+    Task UpdateScheduleAsync(MeditationSchedule s);
+    Task DeleteScheduleAsync(int id);
 }
 
 public sealed class HrvRepository : IHrvRepository
@@ -54,4 +56,8 @@ public sealed class HrvRepository : IHrvRepository
         await _init;
         return await _db.Table<MeditationSchedule>().OrderByDescending(x => x.CreatedDate).ToListAsync();
     }
+
+    public async Task UpdateScheduleAsync(MeditationSchedule s) { await _init; await _db.UpdateAsync(s); }
+
+    public async Task DeleteScheduleAsync(int id) { await _init; await _db.DeleteAsync<MeditationSchedule>(id); }
 }

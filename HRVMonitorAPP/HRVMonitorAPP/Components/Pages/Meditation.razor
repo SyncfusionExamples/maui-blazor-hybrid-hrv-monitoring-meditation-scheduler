@@ -3,68 +3,118 @@
 
 <PageTitle>Meditation Scheduler</PageTitle>
 
-<h1>Meditation Scheduler</h1>
-
-<SfToast @ref="_toast" Timeout="3000" Title="Meditation">
+<SfToast @ref="_toast" Timeout="3000" Width="260px">
     <ToastPosition X="Right" Y="Top" />
 </SfToast>
 
-<p>Suggests a session from the average RMSSD of the latest 60 readings: &lt;30 stress recovery, 30-50 mindfulness, &gt;50 maintenance.</p>
+<div class="toolbar">
+    <h1>Meditation Scheduler</h1>
+    <span class="sep"></span>
+    <SfButton IsPrimary="true" OnClick="Generate">Generate Recommendation</SfButton>
+</div>
 
-<SfButton IsPrimary="true" OnClick="Generate">Generate Recommendation</SfButton>
-
-@if (_loading)
-{
-    <SfSkeleton Shape="Syncfusion.Blazor.Notifications.SkeletonType.Rectangle" Width="100%" Height="100px" />
-}
-else if (_latest is not null)
+@if (_latest is not null)
 {
     <SfCard>
-        <CardHeader Title="Suggested Session" />
         <CardContent>
-            <p><strong>@_latest.RecommendationType</strong></p>
-            <p>Recommended Time: @_latest.RecommendedTime.ToString("g")</p>
-            <p>Duration: @_latest.Duration min</p>
-            <p>Reason: @_latest.Reason</p>
+            <div class="kpi-label">Suggested Session</div>
+            <div class="kpi-value">@_latest.RecommendationType</div>
+            <p class="hint">@_latest.RecommendedTime.ToString("ddd, MMM d HH:mm") &middot; @_latest.Duration min &middot; @_latest.Reason</p>
         </CardContent>
     </SfCard>
+    <div style="height:12px"></div>
 }
 
-<h5 style="margin-top:1.5rem">History</h5>
-<SfGrid DataSource="@_items" AllowPaging="true">
-    <GridPageSettings PageSize="10" />
-    <GridColumns>
-        <GridColumn Field="@nameof(MeditationSchedule.RecommendationType)" HeaderText="Suggested Session" Width="240" />
-        <GridColumn Field="@nameof(MeditationSchedule.RecommendedTime)" HeaderText="Recommended Time" Format="yyyy-MM-dd HH:mm" Width="170" />
-        <GridColumn Field="@nameof(MeditationSchedule.Duration)" HeaderText="Duration (min)" Width="120" />
-        <GridColumn Field="@nameof(MeditationSchedule.Reason)" HeaderText="Reason" />
-    </GridColumns>
-</SfGrid>
+<SfSchedule TValue="SessionEvent" Height="560px" @bind-SelectedDate="_selectedDate" CurrentView="View.Week" StartHour="@_startHour" EndHour="@_endHour">
+    <ScheduleEvents TValue="SessionEvent" OnPopupOpen="OnPopupOpen" ActionCompleted="OnActionCompleted" />
+    <ScheduleEventSettings DataSource="@_events" AllowAdding="false">
+        <ScheduleField Id="Id">
+            <FieldSubject Name="Subject" />
+            <FieldDescription Name="Description" />
+            <FieldStartTime Name="StartTime" />
+            <FieldEndTime Name="EndTime" />
+        </ScheduleField>
+    </ScheduleEventSettings>
+    <ScheduleViews>
+        <ScheduleView Option="View.Day" />
+        <ScheduleView Option="View.Week" />
+        <ScheduleView Option="View.Agenda" />
+    </ScheduleViews>
+</SfSchedule>
 
 @code {
-    private SfToast? _toast;
-    private bool _loading = true;
-    private List<MeditationSchedule> _items = new();
-    private MeditationSchedule? _latest;
-
-    protected override async Task OnInitializedAsync()
+    public class SessionEvent
     {
-        _items = await MeditationSvc.GetSchedulesAsync();
-        _latest = _items.FirstOrDefault();
-        _loading = false;
+        public int Id { get; set; }
+        public string Subject { get; set; } = "";
+        public string Description { get; set; } = "";
+        public DateTime StartTime { get; set; }
+        public DateTime EndTime { get; set; }
+        public DateTime CreatedDate { get; set; }
+    }
+
+    private SfToast? _toast;
+    private List<SessionEvent> _events = new();
+    private MeditationSchedule? _latest;
+    private DateTime _selectedDate = DateTime.Today;
+    private string _startHour = "00:00";
+    private string _endHour = "24:00";
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload()
+    {
+        var items = await MeditationSvc.GetSchedulesAsync();
+        _latest = items.FirstOrDefault();
+        _events = items.Select(i => new SessionEvent
+        {
+            Id = i.Id,
+            Subject = i.RecommendationType,
+            Description = i.Reason,
+            StartTime = i.RecommendedTime,
+            EndTime = i.RecommendedTime.AddMinutes(i.Duration),
+            CreatedDate = i.CreatedDate
+        }).ToList();
     }
 
     private async Task Generate()
     {
-        _loading = true;
-        _latest = await MeditationSvc.GenerateRecommendationAsync();
-        _items = await MeditationSvc.GetSchedulesAsync();
-        _loading = false;
-        if (_toast is not null)
-            await _toast.ShowAsync(new ToastModel
-            {
-                Content = _latest is null ? "No HRV data yet - start streaming first." : "Recommendation saved.",
-                CssClass = _latest is null ? "e-toast-warning" : "e-toast-success"
-            });
+        var created = await MeditationSvc.GenerateRecommendationAsync();
+        if (created is not null)
+        {
+            await Reload();
+            _selectedDate = created.RecommendedTime;
+        }
+        await Toast(created is null ? "No HRV data yet - start streaming first." : "Recommendation saved.",
+                    created is null ? "e-toast-warning" : "e-toast-success");
     }
+
+    private void OnPopupOpen(PopupOpenEventArgs<SessionEvent> args)
+    {
+        // Sessions are created by the recommendation engine only.
+        if (args.Type == PopupType.Editor && args.Data?.Id == 0) args.Cancel = true;
+    }
+
+    private async Task OnActionCompleted(Syncfusion.Blazor.Schedule.ActionEventArgs<SessionEvent> args)
+    {
+        if (args.ActionType == Syncfusion.Blazor.Schedule.ActionType.EventChange && args.ChangedRecords is not null)
+        {
+            foreach (var e in args.ChangedRecords)
+            {
+                var minutes = (int)Math.Round((e.EndTime - e.StartTime).TotalMinutes);
+                await MeditationSvc.UpdateAsync(new MeditationSchedule
+                {
+                    Id = e.Id, CreatedDate = e.CreatedDate, RecommendedTime = e.StartTime,
+                    Duration = minutes, RecommendationType = e.Subject, Reason = e.Description
+                });
+            }
+        }
+        else if (args.ActionType == Syncfusion.Blazor.Schedule.ActionType.EventRemove && args.DeletedRecords is not null)
+        {
+            foreach (var e in args.DeletedRecords) await MeditationSvc.DeleteAsync(e.Id);
+        }
+    }
+
+    private Task Toast(string text, string css) =>
+        _toast is null ? Task.CompletedTask : _toast.ShowAsync(new ToastModel { Content = text, CssClass = css });
 }

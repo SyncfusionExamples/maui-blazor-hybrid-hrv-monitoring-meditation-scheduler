@@ -6,6 +6,8 @@ public interface IMeditationService
 {
     Task<MeditationSchedule?> GenerateRecommendationAsync();
     Task<List<MeditationSchedule>> GetSchedulesAsync();
+    Task UpdateAsync(MeditationSchedule s);
+    Task DeleteAsync(int id);
 }
 
 public sealed class MeditationService : IMeditationService
@@ -38,4 +40,6 @@ public sealed class MeditationService : IMeditationService
     }
 
     public Task<List<MeditationSchedule>> GetSchedulesAsync() => _repo.GetSchedulesAsync();
+    public Task UpdateAsync(MeditationSchedule s) => _repo.UpdateScheduleAsync(s);
+    public Task DeleteAsync(int id) => _repo.DeleteScheduleAsync(id);
 }
